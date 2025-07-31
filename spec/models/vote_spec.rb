@@ -1,3 +1,5 @@
+# typed: false
+
 require "rails_helper"
 
 describe Vote do
@@ -7,19 +9,19 @@ describe Vote do
     v = build(:vote, user: u, story: s, vote: nil)
 
     v.valid?
-    expect(v.errors[:vote]).to eq(["can't be blank"])
+    expect(v.errors[:vote]).to include("can't be blank")
   end
 
-  context "upvoting a score and flags" do
+  context "upvoting a story and flags" do
     # don't need to test short-circuit where vote is "changed" to what it already is
 
     let(:u) { create(:user) }
     let(:s) { create(:story) }
 
     it "-1 to 1" do
-      Vote.vote_thusly_on_story_or_comment_for_user_because(-1, s.id, nil, u.id, 'S')
+      Vote.vote_thusly_on_story_or_comment_for_user_because(-1, s.id, nil, u.id, "S")
       s.reload
-      expect(s.score).to eq(0)
+      expect(s.score).to eq(1)
       expect(s.flags).to eq(1)
       Vote.vote_thusly_on_story_or_comment_for_user_because(1, s.id, nil, u.id, nil)
       s.reload
@@ -28,9 +30,9 @@ describe Vote do
     end
 
     it "-1 to 0" do
-      Vote.vote_thusly_on_story_or_comment_for_user_because(-1, s.id, nil, u.id, 'S')
+      Vote.vote_thusly_on_story_or_comment_for_user_because(-1, s.id, nil, u.id, "S")
       s.reload
-      expect(s.score).to eq(0)
+      expect(s.score).to eq(1)
       expect(s.flags).to eq(1)
       Vote.vote_thusly_on_story_or_comment_for_user_because(0, s.id, nil, u.id, nil)
       s.reload
@@ -61,9 +63,9 @@ describe Vote do
     it "0 to -1" do
       expect(s.score).to eq(1)
       expect(s.flags).to eq(0)
-      Vote.vote_thusly_on_story_or_comment_for_user_because(-1, s.id, nil, u.id, 'S')
+      Vote.vote_thusly_on_story_or_comment_for_user_because(-1, s.id, nil, u.id, "S")
       s.reload
-      expect(s.score).to eq(0)
+      expect(s.score).to eq(1)
       expect(s.flags).to eq(1)
     end
 
@@ -72,9 +74,9 @@ describe Vote do
       s.reload
       expect(s.score).to eq(2)
       expect(s.flags).to eq(0)
-      Vote.vote_thusly_on_story_or_comment_for_user_because(-1, s.id, nil, u.id, 'S')
+      Vote.vote_thusly_on_story_or_comment_for_user_because(-1, s.id, nil, u.id, "S")
       s.reload
-      expect(s.score).to eq(0)
+      expect(s.score).to eq(1)
       expect(s.flags).to eq(1)
     end
   end
@@ -132,9 +134,9 @@ describe Vote do
     expect(s.flags).to eq(0)
   end
 
-  it "removes karma and upvote when downvoting an upvote" do
+  it "removes upvote when downvoting an upvote" do
     s = create(:story)
-    c = create(:comment, :story => s)
+    c = create(:comment, story: s)
     expect(c.user.karma).to eq(0)
 
     u = create(:user)
@@ -152,14 +154,14 @@ describe Vote do
     )
     c.reload
 
-    expect(c.user.karma).to eq(-1)
+    expect(c.user.karma).to eq(0) # doesn't change bc flags don't affect score
     expect(c.score).to eq(0)
     expect(c.flags).to eq(1)
   end
 
   it "neutralizes karma and upvote when unvoting an upvote" do
     s = create(:story)
-    c = create(:comment, :story_id => s.id)
+    c = create(:comment, story_id: s.id)
     u = create(:user)
     expect(c.user.karma).to eq(0)
 

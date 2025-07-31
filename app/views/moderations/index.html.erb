@@ -1,9 +1,5 @@
 <div class="box wide">
-  <div class="legend">
-    Moderation Log
-  </div>
-
-  <%= form_with url: moderations_path, method: :get, local: true do |f| %>
+  <%= form_with url: moderations_path, method: :get do |f| %>
     <label class="normal" for="moderator">Moderator:</label>
     <%= f.select 'moderator', options_for_select(@moderators, @moderator) %>
     <% @what.each do |type, checked| %>
@@ -17,14 +13,21 @@
   <%= render partial: 'table', locals: { moderations: @moderations } %>
 </div>
 
+<% if @moderations.map(&:token).intersect? Moderation::BAD_DOFFING_ENTRIES  %>
+  <p>
+    This table includes 1 or more entries where a user who doffed a hat was <a href="https://github.com/lobsters/lobsters/issues/1591">wrongly listed as a moderator</a>.
+    We don't want to edit or delete from the modlog, so we've annotated this display to explain the bad data.
+  </p>
+<% end %>
+
 <div class="morelink">
   <% if @page > 1 %>
-    <%= link_to "<< Page #{@page - 1}", request.query_parameters.merge({:page => @page - 1}) %>
+    <%= link_to "<< Page #{@page - 1}", @moderation_params.merge({:page => @page - 1}) %>
   <% end %>
   <% if @pages > 1 && @page < @pages %>
     <% if @page > 1 %>
       |
     <% end %>
-    <%= link_to "Page #{@page + 1} >>", request.query_parameters.merge({:page => @page + 1}) %>
+    <%= link_to "Page #{@page + 1} >>", @moderation_params.merge({:page => @page + 1}) %>
   <% end %>
 </div>

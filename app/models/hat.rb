@@ -1,52 +1,66 @@
+# typed: false
+
 class Hat < ApplicationRecord
   belongs_to :user
-  belongs_to :granted_by_user, :class_name => "User", :inverse_of => false
+  belongs_to :granted_by_user, class_name: "User", inverse_of: false
 
+  before_validation :assign_short_id, on: :create
   after_create :log_moderation
 
-  validates :user, :granted_by_user, :hat, presence: true
-  validates :hat, :link, length: { maximum: 255 }
+  include Token
+
+  validates :hat, presence: true
+  validates :hat, :link, length: {maximum: 255}
+  validates :modlog_use, inclusion: {in: [true, false]}
+  validates :short_id, length: {maximum: 10}, presence: true
+
+  scope :active, -> { joins(:user).where(doffed_at: nil).merge(User.active) }
+
+  def assign_short_id
+    self.short_id = ShortId.new(self.class).generate
+  end
 
   def doff_by_user_with_reason(user, reason)
     m = Moderation.new
-    m.user_id = self.user_id
-    m.moderator_user_id = user.id
-    m.action = "Doffed hat \"#{self.hat}\": #{reason}"
+    m.user_id = user_id
+    m.moderator_user_id = user.is_moderator? ? user : nil
+    m.action = "Doffed hat \"#{hat}\""
+    m.reason = reason
     m.save!
 
     self.doffed_at = Time.current
-    self.save!
+    save!
   end
 
   def destroy_by_user_with_reason(user, reason)
     m = Moderation.new
-    m.user_id = self.user_id
-    m.moderator_user_id = user.id
-    m.action = "Revoked hat \"#{self.hat}\": #{reason}"
+    m.user_id = user_id
+    m.moderator_user_id = user.is_moderator? ? user : nil
+    m.action = "Revoked hat \"#{hat}\": #{reason}"
     m.save!
 
-    self.destroy
+    destroy!
   end
 
   def to_html_label
-    hl = (self.link.present? && self.link.match(/^https?:\/\//))
+    hl = link.present? && link.match(/^https?:\/\//)
 
-    h = "<span class=\"hat " <<
-        "hat_#{self.hat.gsub(/[^A-Za-z0-9]/, '_').downcase}\" " <<
-        "title=\"Granted #{self.created_at.strftime('%Y-%m-%d')}"
+    h = "<span class=\"hat " \
+      "hat_#{hat.gsub(/[^A-Za-z0-9]/, "_").downcase}\" " \
+      "title=\"Granted #{created_at.strftime("%Y-%m-%d")}"
 
-    if !hl && self.link.present?
-      h << " - #{ERB::Util.html_escape(self.sanitized_link)}"
+    if !hl && link.present?
+      h << " - #{ERB::Util.html_escape(sanitized_link)}"
     end
 
-    h << "\">" <<
+    h << "\">" \
       "<span class=\"crown\">"
 
     if hl
-      h << "<a href=\"#{ERB::Util.html_escape(self.link)}\" target=\"_blank\">"
+      h << "<a href=\"#{ERB::Util.html_escape(link)}\" target=\"_blank\">"
     end
 
-    h << ERB::Util.html_escape(self.hat)
+    h << ERB::Util.html_escape(hat)
 
     if hl
       h << "</a>"
@@ -58,17 +72,17 @@ class Hat < ApplicationRecord
   end
 
   def to_txt
-    "(#{self.hat}) "
+    "(#{hat}) "
   end
 
   def log_moderation
     m = Moderation.new
-    m.created_at = self.created_at
-    m.user_id = self.user_id
-    m.moderator_user_id = self.granted_by_user_id
-    m.action = "Granted hat \"#{self.hat}\"" + (self.link.present? ?
-      " (#{self.link})" : "")
-    m.save
+    m.created_at = created_at
+    m.user_id = user_id
+    m.moderator_user_id = granted_by_user_id
+    m.action = "Granted hat \"#{hat}\"" + (link.present? ?
+      " (#{link})" : "")
+    m.save!
   end
 
   def sanitized_link
@@ -78,5 +92,9 @@ class Hat < ApplicationRecord
     else
       link
     end
+  end
+
+  def to_param
+    short_id
   end
 end

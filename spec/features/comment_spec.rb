@@ -1,44 +1,71 @@
-require 'rails_helper'
+# typed: false
+
+require "rails_helper"
 
 # uses page.driver.post because we're not running a full js engine,
 # so the call can't just be click_on('delete'), etc.
 
 RSpec.feature "Commenting" do
   let(:user) { create(:user) }
-  let(:story) { create(:story, user: user) }
+  let(:story) { create(:story) }
 
   before(:each) { stub_login_as user }
 
-  scenario 'posting a comment' do
+  scenario "posting a comment" do
     visit "/s/#{story.short_id}"
-    expect(page).to have_button('Post')
-    fill_in 'comment', with: 'An example comment'
-    click_on 'Post'
+    expect(page).to have_button("Post")
+    fill_in "comment", with: "An example comment"
+    click_on "Post"
     visit "/s/#{story.short_id}"
-    expect(page).to have_content('example comment')
+    expect(page).to have_content("example comment")
+  end
+
+  scenario "posting a comment with a hat" do
+    hat = create(:hat, user: user)
+    visit "/s/#{story.short_id}"
+    fill_in "comment", with: "An example comment"
+    select hat.hat, from: "hat_id"
+    click_on "Post"
+    visit "/s/#{story.short_id}"
+    expect(page).to have_css("span.hat")
+  end
+
+  feature "editing comments" do
+    scenario "adding a hat to a comment" do
+      hat = create(:hat, user: user)
+      comment = create(:comment, story: story, user: user, hat: nil)
+      visit "/s/#{story.short_id}"
+      expect(page).to_not have_css("span.hat")
+
+      visit "/comments/#{comment.short_id}/edit"
+      select hat.hat, from: "hat_id"
+      click_on "Update"
+
+      visit "/s/#{story.short_id}"
+      expect(page).to have_css("span.hat")
+    end
   end
 
   feature "deleting comments" do
-    scenario 'deleting a comment' do
+    scenario "deleting a comment" do
       comment = create(:comment,
-                       user_id: user.id,
-                       story_id: story.id,
-                       created_at: 1.day.ago,
-                      )
+        user_id: user.id,
+        story_id: story.id,
+        created_at: 1.day.ago)
       visit "/s/#{story.short_id}"
-      expect(page).to have_link('delete')
+      expect(page).to have_link("delete")
 
       page.driver.post "/comments/#{comment.short_id}/delete"
       visit "/s/#{story.short_id}"
-      expect(page).to have_link('undelete')
+      expect(page).to have_link("undelete")
       comment.reload
       expect(comment.is_deleted?).to be(true)
     end
 
-    scenario 'trying to delete old comments' do
+    scenario "trying to delete old comments" do
       comment = create(:comment, user: user, story: story, created_at: 90.days.ago)
       visit "/s/#{story.short_id}"
-      expect(page).not_to have_link('delete')
+      expect(page).not_to have_link("delete")
 
       page.driver.post "/comments/#{comment.short_id}/delete"
       comment.reload
@@ -47,25 +74,25 @@ RSpec.feature "Commenting" do
   end
 
   feature "disowning comments" do
-    scenario 'disowning a comment' do
+    scenario "disowning a comment" do
       # bypass validations to create inactive-user:
       create(:user, :inactive)
 
       comment = create(:comment, user_id: user.id, story_id: story.id, created_at: 90.days.ago)
       visit "/s/#{story.short_id}"
-      expect(page).to have_link('disown')
+      expect(page).to have_button("disown")
 
       page.driver.post "/comments/#{comment.short_id}/disown"
       comment.reload
       expect(comment.user).not_to eq(user)
       visit "/s/#{story.short_id}"
-      expect(page).to have_content('inactive-user')
+      expect(page).to have_content("inactive-user")
     end
 
-    scenario 'trying to disown recent comments' do
+    scenario "trying to disown recent comments" do
       comment = create(:comment, user_id: user.id, story_id: story.id, created_at: 1.day.ago)
       visit "/s/#{story.short_id}"
-      expect(page).not_to have_link('disown')
+      expect(page).not_to have_link("disown")
 
       page.driver.post "/comments/#{comment.short_id}/disown"
       comment.reload
@@ -83,34 +110,41 @@ RSpec.feature "Commenting" do
         user_id: user.id,
         story_id: story.id,
         created_at: 90.days.ago,
-        comment: "Cool story.",
+        comment: "Cool story."
       )
       visit "/settings"
       click_on "Logout"
 
       stub_login_as reader
       visit "/s/#{story.short_id}"
-      expect(page.find(:css, ".comment .comment_text")).to have_content('Cool story.')
+      expect(page.find(:css, ".comment .comment_text")).to have_content("Cool story.")
       expect(comment.score).to eq(1)
       page.driver.post "/comments/#{comment.short_id}/upvote"
       comment.reload
       expect(comment.score).to eq(2)
 
-      story.update(merged_stories: [hot_take])
+      story.update!(merged_stories: [hot_take])
       visit "/s/#{story.short_id}"
-      expect(page.find(:css, ".comment.upvoted .score")).to have_content('2')
+      expect(page.find(:css, ".comment.upvoted .upvoter")).to have_content("2")
     end
   end
 
-  feature "user threads list" do
-    scenario "viewing user's threads" do
-      poster = create(:user)
-      parent = create(:comment, story: story, user: poster)
-      reply = create(:comment, story: story, user: user, parent_comment: parent)
+  describe "short_id redirection" do
+    it "redirects /c/shortid to the story with anchor" do
+      story = create(:story, title: "story")
+      comment = create(:comment, story:)
 
-      visit "/threads/#{user.username}"
-      expect(page).to have_content(parent.comment)
-      expect(page).to have_content(reply.comment)
+      visit "/c/#{comment.short_id}"
+      expect(current_url).to eq("http://www.example.com/s/#{story.short_id}/story#c_#{comment.short_id}")
+    end
+
+    it "redirects /c/shortid to merged stories with anchor" do
+      parent = create(:story, title: "parent")
+      merged = create(:story, merged_into_story: parent, title: "merged")
+      comment = create(:comment, story: merged)
+
+      visit "/c/#{comment.short_id}"
+      expect(current_url).to eq("http://www.example.com/s/#{parent.short_id}/parent#c_#{comment.short_id}")
     end
   end
 end
